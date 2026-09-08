@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Shin Inclinometer — Hip IR</title>
+<style>
+  :root{
+    --ink:#0e1a24;        /* text on light bands */
+    --paper:#f5f3ee;      /* text on dark bands */
+    --band-none:#22303c;  /* waiting state */
+    --band-red:#b3402e;   /* <20° restricted */
+    --band-amber:#c78a1f; /* 20–30° */
+    --band-green:#2e7d4f; /* 30–40° */
+    --band-blue:#2b5f8a;  /* >40° */
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--band-none);color:var(--paper);
+    display:flex;flex-direction:column;align-items:center;justify-content:space-between;
+    min-height:100svh;padding:max(16px,env(safe-area-inset-top)) 20px max(16px,env(safe-area-inset-bottom));
+    text-align:center;transition:background-color .35s ease;
+    overscroll-behavior:none;touch-action:manipulation;
+  }
+  @media (prefers-reduced-motion:reduce){body{transition:none}}
+
+  header{width:100%}
+  header h1{font-size:1.05rem;font-weight:600;letter-spacing:.01em}
+  header p{font-size:.85rem;opacity:.75;margin-top:2px}
+
+  main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%}
+  #deg{
+    font-size:min(38vw,11rem);font-weight:800;line-height:1;
+    font-variant-numeric:tabular-nums;letter-spacing:-.02em;
+  }
+  #deg sup{font-size:.35em;font-weight:600;vertical-align:.9em}
+  #band{font-size:1.25rem;font-weight:600;margin-top:.4rem;min-height:1.6rem}
+  #hint{font-size:.9rem;opacity:.8;margin-top:.6rem;max-width:32ch}
+
+  .held #deg::after{content:" held";font-size:.22em;font-weight:600;opacity:.85;vertical-align:1.6em}
+
+  .controls{display:flex;gap:12px;width:100%;max-width:420px;margin-top:1.6rem}
+  button{
+    flex:1;font:inherit;font-size:1.05rem;font-weight:600;
+    padding:14px 8px;border-radius:12px;border:2px solid currentColor;
+    background:transparent;color:inherit;cursor:pointer;
+  }
+  button:active{transform:scale(.97)}
+  button:focus-visible{outline:3px solid currentColor;outline-offset:2px}
+  #start{border-style:solid;background:rgba(255,255,255,.14)}
+  .hidden{display:none !important}
+
+  footer{width:100%;max-width:440px}
+  details{font-size:.9rem;text-align:left;opacity:.9}
+  summary{cursor:pointer;font-weight:600;padding:6px 0;text-align:center;list-style:none}
+  summary::-webkit-details-marker{display:none}
+  details ol{margin:.4rem 0 .4rem 1.2rem;line-height:1.5}
+  .fine{font-size:.72rem;opacity:.55;margin-top:8px}
+
+  /* light-text vs dark-text per band, for contrast */
+  body.b-amber,body.b-green{color:var(--paper)}
+  body.b-red,body.b-blue,body.b-none{color:var(--paper)}
+</style>
+</head>
+<body class="b-none">
+
+<header>
+  <h1>Shin inclinometer — seated hip internal rotation</h1>
+  <p>WFC Utrecht 2026 · Session T2C</p>
+</header>
+
+<main>
+  <div id="deg" aria-live="polite">--<sup>°</sup></div>
+  <div id="band"></div>
+  <p id="hint">If this message does not change, this viewer is blocking the app — open the hosted (https) link in Safari or Chrome instead.</p>
+  <div class="controls">
+    <button id="start">Start</button>
+    <button id="zero" class="hidden">Zero</button>
+    <button id="hold" class="hidden">Hold</button>
+  </div>
+</main>
+
+<footer>
+  <details>
+    <summary>How to measure (3 steps)</summary>
+    <ol>
+      <li>Partner seated, hip and knee at 90°. Rotate the hip inward — the foot swings outward.</li>
+      <li>Lay the phone flat along the shin, screen up. Read the angle from vertical shin start: tap <b>Zero</b> with the shin vertical, then measure at end range.</li>
+      <li>Tap <b>Hold</b> to freeze the number and show your partner. Enter the band in the poll.</li>
+    </ol>
+    <p>Bands: under 20° · 20–30° · 30–40° · over 40°. The screen color is the band.</p>
+  </details>
+  <p class="fine">Works offline after loading. No data leaves your phone. Requires motion sensors (phones and tablets). iPhone: allow motion access when asked.</p>
+</footer>
+
+<script>
+(function(){
+  var degEl=document.getElementById('deg'),
+      bandEl=document.getElementById('band'),
+      hintEl=document.getElementById('hint'),
+      startBtn=document.getElementById('start'),
+      zeroBtn=document.getElementById('zero'),
+      holdBtn=document.getElementById('hold');
+  var zero=0, held=false, smoothed=null, lastShown=null, running=false, rawLatest=0;
+
+  function bandFor(a){
+    if(a<20)  return {cls:'b-red',   label:'under 20° — restricted', bg:'--band-red'};
+    if(a<30)  return {cls:'b-amber', label:'20–30°',                 bg:'--band-amber'};
+    if(a<=40) return {cls:'b-green', label:'30–40°',                 bg:'--band-green'};
+    return      {cls:'b-blue',  label:'over 40°',               bg:'--band-blue'};
+  }
+
+  function render(angle){
+    var a=Math.round(angle);
+    if(a===lastShown) return;
+    lastShown=a;
+    degEl.innerHTML=a+'<sup>°</sup>';
+    var b=bandFor(a);
+    bandEl.textContent=b.label;
+    document.body.className=b.cls+(held?' held':'');
+    document.body.style.backgroundColor=getComputedStyle(document.documentElement).getPropertyValue(b.bg);
+  }
+
+  function onOrient(e){
+    if(e.beta===null||e.beta===undefined) return;
+    if(!running){
+      running=true;
+      hintEl.textContent='Lay the phone flat along the shin, screen up. Zero on the vertical shin first.';
+      startBtn.classList.add('hidden');
+      zeroBtn.classList.remove('hidden');
+      holdBtn.classList.remove('hidden');
+    }
+    if(held) return;
+    // beta = pitch of the device's long axis, in degrees.
+    var raw=Math.abs(e.beta);
+    if(raw>90) raw=180-raw;          // fold so face-up past-vertical reads sensibly
+    rawLatest=raw;
+    var angle=Math.abs(raw-zero);
+    smoothed = (smoothed===null) ? angle : smoothed*0.8 + angle*0.2;  // low-pass
+    render(smoothed);
+  }
+
+  function begin(){
+    if(typeof DeviceOrientationEvent!=='undefined' &&
+       typeof DeviceOrientationEvent.requestPermission==='function'){
+      // iOS 13+: permission must come from a user gesture, HTTPS only
+      DeviceOrientationEvent.requestPermission().then(function(state){
+        if(state==='granted'){ window.addEventListener('deviceorientation',onOrient); }
+        else { hintEl.textContent='Motion access was denied. Reload the page and tap Start again, then choose Allow.'; }
+      }).catch(function(){
+        hintEl.textContent='Motion sensors need a secure (https) page. Open the QR link, not a saved copy.';
+      });
+    } else if('DeviceOrientationEvent' in window){
+      window.addEventListener('deviceorientation',onOrient);
+      setTimeout(function(){
+        if(!running){ hintEl.textContent='No motion data — this device may lack tilt sensors. Use the 20/30/40° reference picture on the screen instead.'; }
+      },1500);
+    } else {
+      hintEl.textContent='This device has no motion sensors. Use the 20/30/40° reference picture on the screen instead.';
+    }
+  }
+
+  startBtn.addEventListener('click',function(){
+    try{ begin(); }
+    catch(err){ hintEl.textContent='Motion access failed here ('+err.name+'). This page needs a secure https link — open the QR/hosted address in Safari or Chrome.'; }
+  });
+  // Script-alive check: if JS runs, replace the static diagnostic hint.
+  hintEl.textContent='Ready. Tap Start, then lay the phone flat along your partner\u2019s shin, screen up, top of phone toward the knee.';
+  zeroBtn.addEventListener('click',function(){ zero=rawLatest; smoothed=0; lastShown=null; render(0); });
+  holdBtn.addEventListener('click',function(){
+    held=!held;
+    holdBtn.textContent=held?'Resume':'Hold';
+    document.body.classList.toggle('held',held);
+  });
+})();
+</script>
+</body>
+</html>
