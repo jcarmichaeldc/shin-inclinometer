@@ -51,6 +51,10 @@
   details ol{margin:.4rem 0 .4rem 1.2rem;line-height:1.5}
   .fine{font-size:.72rem;opacity:.55;margin-top:8px}
 </style>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#22303c">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 </head>
 <body>
 
@@ -156,6 +160,9 @@
     statusEl.textContent=held?'held':'';
   });
 })();
+</script>
+<script>
+if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}
 </script>
 </body>
 </html>
